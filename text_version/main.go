@@ -18,7 +18,15 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	var chainChoose int8
+	url := getUserParms()
+
+	if url != "" {
+		getRealNFT(url)
+	}
+}
+
+func getUserParms() string {
+	var chainChoose string
 	var chainName string
 	var contractAddr string
 	var tokenID string
@@ -27,21 +35,21 @@ func main() {
 	fmt.Scan(&chainChoose)
 
 	switch chainChoose {
-	case 1:
+	case "1":
 		chainName = "eth"
-	case 2:
+	case "2":
 		chainName = "polygon"
-	case 3:
+	case "3":
 		chainName = "bsc"
-	case 4:
+	case "4":
 		chainName = "avalanche"
-	case 5:
+	case "5":
 		chainName = "fantom"
-	case 6:
+	case "6":
 		chainName = "cronos"
 	default:
 		fmt.Println("Not supported network!")
-		return
+		return ""
 	}
 
 	fmt.Printf("Contract Address:")
@@ -50,7 +58,12 @@ func main() {
 	fmt.Printf("Token ID:")
 	fmt.Scan(&tokenID)
 
-	url := "https://deep-index.moralis.io/api/v2/nft/" + contractAddr + "/" + tokenID + "?chain=" + chainName + "&format=decimal"
+	url := "https://deep-index.moralis.io/api/v2/nft/" + contractAddr + "/" + tokenID + "?chain=" + chainName +
+		"&format=decimal"
+	return url
+}
+
+func getRealNFT(url string) {
 
 	req, _ := http.NewRequest("GET", url, nil)
 
@@ -66,23 +79,38 @@ func main() {
 	defer res.Body.Close()
 	body, _ := ioutil.ReadAll(res.Body)
 
-	var JSON map[string]interface{}
-	json.Unmarshal([]byte(body), &JSON)
+	var tokenInfoJson map[string]interface{}
+	json.Unmarshal([]byte(body), &tokenInfoJson)
 
-	tokenStruct := jsonToMap(JSON)
+	tokenStruct := jsonToMap(tokenInfoJson)
 
+	// Check if it's a contract account
 	_, ok := tokenStruct["contract_type"]
 
 	if !ok {
 		log.Println("Your input is not a contract account or it does not exist.")
 	}
 
-	var METADATAJSON map[string]interface{}
-	metadata := tokenStruct["metadata"][0]
-	json.Unmarshal([]byte(metadata), &METADATAJSON)
-	metadataMap := jsonToMap(METADATAJSON)
+	var metadataJson map[string]interface{}
 
-	imageUri := metadataMap["image"][0]
+	metadata := "<None>"
+	imageUri := "<None>"
+	description := "<None>"
+
+	if _, ok := tokenStruct["metadata"]; ok {
+		metadata = tokenStruct["metadata"][0]
+
+		json.Unmarshal([]byte(metadata), &metadataJson)
+		metadataMap := jsonToMap(metadataJson)
+
+		if _, ok2 := metadataMap["description"]; ok2 {
+			description = metadataMap["description"][0]
+		}
+
+		if _, ok2 := metadataMap["image"]; ok2 {
+			imageUri = metadataMap["image"][0]
+		}
+	}
 
 	// Change ipfs gateway fron default to Moralis gateway
 	if strings.HasPrefix(imageUri, "ipfs://") {
@@ -98,11 +126,41 @@ func main() {
 
 	fmt.Println("\n--\nContract Type: " + tokenStruct["contract_type"][0] +
 		"\nCollection Symbol: " + tokenStruct["symbol"][0] +
-		"\nDescription: " + metadataMap["description"][0] +
-		"\n\nToken Name: " + metadataMap["name"][0] +
+		"\nDescription: " + description +
+		"\n\nToken Name: " + tokenStruct["name"][0] + " #" + tokenStruct["token_id"][0] +
 		"\nToken URI: " + tokenStruct["token_uri"][0] +
 		"\nOwner: " + domain +
 		"\nReal NFT URI: " + imageUri)
+
+	if metadata == "<None>" || !isIpfsFile(tokenStruct["token_uri"][0]) {
+		fmt.Println("\n***\nThere may be risks that this NFT collection may contain incomplete information and/or" +
+			"the NFTs information may be modified by the project founder at will.\n***")
+	}
+}
+
+func isIpfsFile(token_uri string) bool {
+
+	if i := strings.Index(token_uri, "ipfs/"); i != -1 {
+		i += 5
+		cidCount := 0
+
+		for ; i < len(token_uri) || (i < len(token_uri) && string(token_uri[i]) != "/"); i++ {
+			// 0-9, A-Z, a-z in ascii code(10)
+			if (token_uri[i] >= 48 && token_uri[i] <= 57) ||
+				(token_uri[i] >= 65 && token_uri[i] <= 90) ||
+				(token_uri[i] >= 97 && token_uri[i] <= 122) {
+				cidCount++
+
+			} else {
+				return false
+			}
+		}
+
+		return cidCount == 46
+	} else {
+		return false
+	}
+
 }
 
 func getEnsDomain(account string) string {
@@ -117,6 +175,7 @@ func getEnsDomain(account string) string {
 
 	if err != nil {
 		log.Println("Something went wrong when trying fetch user ENS domain.")
+		return ""
 	}
 
 	defer res.Body.Close()
