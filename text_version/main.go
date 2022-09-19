@@ -89,6 +89,7 @@ func getRealNFT(url string) {
 
 	if !ok {
 		log.Println("Your input is not a contract account or it does not exist.")
+		return
 	}
 
 	var metadataJson map[string]interface{}
@@ -133,8 +134,9 @@ func getRealNFT(url string) {
 		"\nReal NFT URI: " + imageUri)
 
 	if metadata == "<None>" || !isIpfsFile(tokenStruct["token_uri"][0]) {
-		fmt.Println("\n***\nThere may be risks that this NFT collection may contain incomplete information and/or" +
-			"the NFTs information may be modified by the project founder at will.\n***")
+		fmt.Println("\n*** Risk(s) Detected ***\n" +
+			"This NFT collection does not contain complete information and/or " +
+			"the NFT information may be modified at will by the project founder.\n--")
 	}
 }
 
@@ -144,12 +146,16 @@ func isIpfsFile(token_uri string) bool {
 		i += 5
 		cidCount := 0
 
-		for ; i < len(token_uri) || (i < len(token_uri) && string(token_uri[i]) != "/"); i++ {
+		for ; i < len(token_uri); i++ {
+
 			// 0-9, A-Z, a-z in ascii code(10)
 			if (token_uri[i] >= 48 && token_uri[i] <= 57) ||
 				(token_uri[i] >= 65 && token_uri[i] <= 90) ||
 				(token_uri[i] >= 97 && token_uri[i] <= 122) {
 				cidCount++
+
+			} else if string(token_uri[i]) == "/" {
+				break
 
 			} else {
 				return false
