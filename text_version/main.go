@@ -117,6 +117,9 @@ func getRealNFT(url string) {
 	if strings.HasPrefix(imageUri, "ipfs://") {
 		imageUri = strings.TrimPrefix(imageUri, "ipfs://")
 		imageUri = "https://ipfs.moralis.io:2053/ipfs/" + imageUri
+	} else if strings.HasPrefix(imageUri, "https://ipfs.io/ipfs/") {
+		imageUri = strings.TrimPrefix(imageUri, "https://ipfs.io/ipfs/")
+		imageUri = "https://ipfs.moralis.io:2053/ipfs/" + imageUri
 	}
 
 	domain := getEnsDomain(tokenStruct["owner_of"][0])
@@ -125,26 +128,32 @@ func getRealNFT(url string) {
 		domain = tokenStruct["owner_of"][0]
 	}
 
+	ipfsCID := getIpfsCID(tokenStruct["token_uri"][0])
+
 	fmt.Println("\n--\nContract Type: " + tokenStruct["contract_type"][0] +
 		"\nCollection Symbol: " + tokenStruct["symbol"][0] +
 		"\nDescription: " + description +
 		"\n\nToken Name: " + tokenStruct["name"][0] + " #" + tokenStruct["token_id"][0] +
 		"\nToken URI: " + tokenStruct["token_uri"][0] +
+		"\nToken CID Info: " + "https://cid.ipfs.tech/#" + ipfsCID +
 		"\nOwner: " + domain +
 		"\nReal NFT URI: " + imageUri)
 
-	if metadata == "<None>" || !isIpfsFile(tokenStruct["token_uri"][0]) {
+	if metadata == "<None>" || len(ipfsCID) == 0 {
 		fmt.Println("\n*** Risk(s) Detected ***\n" +
 			"This NFT collection does not contain complete information and/or " +
 			"the NFT information may be modified at will by the project founder.\n--")
 	}
 }
 
-func isIpfsFile(token_uri string) bool {
+func getIpfsCID(token_uri string) string {
+	const cidV0_length = 46 // base58btc
+	const cidV1_length = 59 // base32
 
 	if i := strings.Index(token_uri, "ipfs/"); i != -1 {
 		i += 5
 		cidCount := 0
+		cid := ""
 
 		for ; i < len(token_uri); i++ {
 
@@ -152,19 +161,25 @@ func isIpfsFile(token_uri string) bool {
 			if (token_uri[i] >= 48 && token_uri[i] <= 57) ||
 				(token_uri[i] >= 65 && token_uri[i] <= 90) ||
 				(token_uri[i] >= 97 && token_uri[i] <= 122) {
+				cid += string(token_uri[i])
 				cidCount++
 
 			} else if string(token_uri[i]) == "/" {
 				break
 
 			} else {
-				return false
+				return ""
 			}
 		}
 
-		return cidCount == 46
+		if cidCount == cidV0_length || cidCount == cidV1_length {
+			return cid
+		} else {
+			return ""
+		}
+		
 	} else {
-		return false
+		return ""
 	}
 
 }
